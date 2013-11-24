@@ -32,6 +32,20 @@
 #define ELEMENTSOF(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 /**
+ *  Service type names in Keystone's catalog of services.
+ *  Order must match that in enum openstack_service .
+ */
+static const char *openstack_service_names[] = {
+	"identity",     /* Keystone */
+	"compute",      /* Nova */
+	"ec2",          /* Nova EC2 */
+	"object-store", /* Swift */
+	"s3",           /* Swift S3 */
+	"volume",       /* Cinder */
+	"image"         /* Glance */
+};
+
+/**
  * Default handler for libcurl errors.
  */
 static void
@@ -306,10 +320,6 @@ find_service_by_type_name(keystone_context_t *context, const char *desired_type)
 
 	return json_array_find(context, context->pvt.services, filter_service_by_type, (void *) desired_type);
 }
-
-static const char * openstack_service_names[] = {
-	"object-store"
-};
 
 struct json_object *
 find_service_by_type(keystone_context_t *context, enum openstack_service desired_type)

@@ -27,7 +27,13 @@ enum keystone_error {
  * Types of OpenStack service.
  */
 enum openstack_service {
-	OS_SERVICE_SWIFT = 0
+	OS_SERVICE_KEYSTONE = 0, /* Keystone authentication and service catalog */
+	OS_SERVICE_NOVA     = 1, /* Nova compute */
+	OS_SERVICE_NOVA_EC2 = 2, /* Nova compute, EC2 API */
+	OS_SERVICE_SWIFT    = 3, /* Swift object storage */
+	OS_SERVICE_SWIFT_S3 = 4, /* Swift object storage, S3 API */
+	OS_SERVICE_CINDER   = 5, /* Cinder block storage */
+	OS_SERVICE_GLANCE   = 6  /* Glance image storage */
 };
 
 /* swift client library's per-thread private context */
