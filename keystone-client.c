@@ -33,9 +33,9 @@
 
 /**
  *  Service type names in Keystone's catalog of services.
- *  Order must match that in enum openstack_service .
+ *  Order must match that in enum openstack_service.
  */
-static const char *openstack_service_names[] = {
+static const char *const openstack_service_names[] = {
 	"identity",     /* Keystone */
 	"compute",      /* Nova */
 	"ec2",          /* Nova EC2 */
@@ -165,6 +165,8 @@ void
 keystone_end(keystone_context_t *context)
 {
 	assert(context != NULL);
+	assert(context->pvt.curl != NULL);
+
 	curl_easy_cleanup(context->pvt.curl);
 	context->pvt.curl = NULL;
 	if (context->pvt.auth_token != NULL) {
@@ -188,6 +190,9 @@ keystone_set_proxy(keystone_context_t *context, const char *proxy_url)
 {
 	CURLcode curl_err;
 
+	assert(context != NULL);
+	assert(context->pvt.curl != NULL);
+
 	curl_err = curl_easy_setopt(context->pvt.curl, CURLOPT_PROXY, (NULL == proxy_url) ? "" : proxy_url);
 	if (CURLE_OK != curl_err) {
 		context->curl_error("curl_easy_setopt", curl_err);
@@ -206,6 +211,9 @@ keystone_set_debug(keystone_context_t *context, unsigned int enable_debugging)
 {
 	CURLcode curl_err;
 
+	assert(context != NULL);
+	assert(context->pvt.curl != NULL);
+
 	curl_err = curl_easy_setopt(context->pvt.curl, CURLOPT_VERBOSE, enable_debugging ? 1 : 0);
 	if (CURLE_OK != curl_err) {
 		context->curl_error("curl_easy_setopt", curl_err);
@@ -215,10 +223,16 @@ keystone_set_debug(keystone_context_t *context, unsigned int enable_debugging)
 	return KSERR_SUCCESS;
 }
 
+/**
+ * Return the length of the given JSON array.
+ */
 static unsigned int
 json_array_length(keystone_context_t *context, struct json_object *array)
 {
 	int len;
+
+	assert(context != NULL);
+	assert(array != NULL);
 
 	if (json_object_is_type(array, json_type_array)) {
 		len = json_object_array_length(array);
@@ -237,41 +251,66 @@ json_array_length(keystone_context_t *context, struct json_object *array)
 	return (unsigned int) len;
 }
 
+/**
+ * Return the index'th element of the given JSON array.
+ */
 static struct json_object *
-json_array_get(keystone_context_t *context, struct json_object *array, unsigned int i)
+json_array_get(keystone_context_t *context, struct json_object *array, unsigned int index)
 {
 	struct json_object *item;
+
+	assert(context != NULL);
+	assert(array != NULL);
+
 	if (json_object_is_type(array, json_type_array)) {
-		if (i < json_array_length(context, array)) {
-			item = json_object_array_get_idx(array, i);
+		if (index < json_array_length(context, array)) {
+			item = json_object_array_get_idx(array, index);
 			if (NULL == item) {
-				context->keystone_error("failed to index into array", KSERR_PARSE);
+				context->keystone_error("failed to index into JSON array", KSERR_PARSE);
 			}
 		} else {
-			context->keystone_error("array index out of bound", KSERR_PARSE);
+			context->keystone_error("JSON array index out of bound", KSERR_PARSE);
 			item = NULL;
 		}
 	} else {
-		context->keystone_error("object is not an array", KSERR_PARSE);
+		context->keystone_error("JSON object is not an array", KSERR_PARSE);
 		item = NULL;
 	}
 	return item;
 }
 
+/**
+ * Types of return from an enumerator function for a JSON array.
+ */
 enum item_callback_return {
-	CONTINUE = 0,
-	STOP = 1
+	CONTINUE = 0, /* Continue iterating */
+	STOP     = 1  /* Cease iteration */
 };
 
 typedef enum item_callback_return item_callback_return_t;
 
+/**
+ * A function which receives items from a JSON array.
+ */
 typedef item_callback_return_t (*item_callback_func_t)(keystone_context_t *context, struct json_object *item, void *callback_arg);
 
+/**
+ * Iterate over the given JSON array, passing elements of it to the given iteration function.
+ * If the iteration function ever returns STOP, return the array element passed to it which caused it to first return STOP.
+ * If the iteration function returns CONTINUE for each and every array element, return NULL.
+ * The iteration function is not guaranteed to be called for each and every element in the given array.
+ */
 static struct json_object *
 json_array_find(keystone_context_t *context, struct json_object *array, item_callback_func_t callback, void *callback_arg)
 {
 	struct json_object *item;
-	unsigned int i = json_array_length(context, array);
+	unsigned int i;
+
+	assert(context != NULL);
+	assert(array != NULL);
+	assert(callback != NULL);
+
+	i = json_array_length(context, array);
 	while (i--) {
 		item_callback_return_t ret;
 		item = json_array_get(context, array, i);
@@ -286,14 +325,24 @@ json_array_find(keystone_context_t *context, struct json_object *array, item_cal
 			break;
 		}
 	}
+
 	return NULL;
 }
 
+/**
+ * If the OpenStack service represented by the given JSON object is of the type name given by callback_arg, return STOP.
+ * Otherwise, if it is of some other type or if its type cannot be determined, return CONTINUE.
+ */
 static item_callback_return_t
 filter_service_by_type(keystone_context_t *context, struct json_object *service, void *callback_arg)
 {
 	const char *desired_type = (const char *) callback_arg;
 	struct json_object *service_type;
+
+	assert(context != NULL);
+	assert(service != NULL);
+	assert(callback_arg != NULL);
+
 	if (!json_object_is_type(service, json_type_object)) {
 		context->keystone_error("response.access.serviceCatalog[n] is not an object", KSERR_PARSE);
 		return CONTINUE;
@@ -309,28 +358,46 @@ filter_service_by_type(keystone_context_t *context, struct json_object *service,
 	if (0 != strcmp(json_object_get_string(service_type), desired_type)) {
 		return CONTINUE; /* Not the service type we're after */
 	}
+
 	return STOP; /* Acceptable */
 }
 
+/**
+ * Given a JSON array representing a list of OpenStack services, find the first service of the given-named type.
+ * If a service of the given type name is found, return it.
+ * Otherwise, if no service of the given type name is found, return NULL.
+ */
 struct json_object *
-find_service_by_type_name(keystone_context_t *context, const char *desired_type)
+find_service_by_type_name(keystone_context_t *context, struct json_object *services, const char *desired_type)
 {
 	assert(context != NULL);
+	assert(services != NULL);
 	assert(desired_type != NULL);
 
-	return json_array_find(context, context->pvt.services, filter_service_by_type, (void *) desired_type);
+	return json_array_find(context, services, filter_service_by_type, (void *) desired_type);
 }
 
+/**
+ * Given a JSON array representing a list of OpenStack services, find the first service of the given type.
+ * Otherwise, if a service of the given type is found, return it.
+ * Otherwise, if no service of the given type is found, return NULL.
+ */
 struct json_object *
-find_service_by_type(keystone_context_t *context, enum openstack_service desired_type)
+find_service_by_type(keystone_context_t *context, struct json_object *services, enum openstack_service desired_type)
 {
 	assert(context != NULL);
+	assert(services != NULL);
 	assert((unsigned int) desired_type < ELEMENTSOF(openstack_service_names));
 	assert(openstack_service_names[(unsigned int) desired_type] != NULL);
 
-	return json_array_find(context, context->pvt.services, filter_service_by_type, (void *) openstack_service_names[(unsigned int) desired_type]);
+	return json_array_find(context, services, filter_service_by_type, (void *) openstack_service_names[(unsigned int) desired_type]);
 }
 
+/**
+ * Given a JSON object representing an endpoint of an OpenStack service and a desired endpoint version,
+ * if the given endpoint appears to have the given API version, or it has no versionID attribute, return STOP.
+ * Otherwise, if the endpoint's version is not the desired version, or the endpoint's version is erroneous, return CONTINUE.
+ */
 static item_callback_return_t
 filter_endpoint_by_version(keystone_context_t *context, json_object *endpoint, void *callback_arg)
 {
@@ -339,6 +406,7 @@ filter_endpoint_by_version(keystone_context_t *context, json_object *endpoint, v
 
 	assert(context != NULL);
 	assert(endpoint != NULL);
+	assert(callback_arg != NULL);
 
 	desired_api_version = *((unsigned int *) callback_arg);
 	if (!json_object_is_type(endpoint, json_type_object)) {
@@ -362,6 +430,11 @@ filter_endpoint_by_version(keystone_context_t *context, json_object *endpoint, v
 	return STOP;
 }
 
+/**
+ * Given a JSON object representing an OpenStack service, find the first endpoint of the given version.
+ * If an endpoint of the given version is found, return it.
+ * Otherwise, if no endpoint of the given version is found, return NULL.
+ */
 static struct json_object *
 service_find_endpoint_by_version(keystone_context_t *context, struct json_object *service, unsigned int desired_api_version)
 {
@@ -383,6 +456,9 @@ service_find_endpoint_by_version(keystone_context_t *context, struct json_object
 	return endpoint;
 }
 
+/**
+ * Given a JSON object representing an OpenStack service endpoint, return its public URL, if any.
+ */
 static const char *
 endpoint_public_url(keystone_context_t *context, struct json_object *endpoint)
 {
@@ -404,6 +480,12 @@ endpoint_public_url(keystone_context_t *context, struct json_object *endpoint)
 	return url_val;
 }
 
+/**
+ * Given a desired service type and version, find a service of the given type in Keystone's catalog of services,
+ * then find an endpoint of that service with the given API version, and return its public URL.
+ * Return NULL if the service cannot be found, or if no endpoint of the given version can be found,
+ * or if the service endpoint of the given version has no public URL.
+ */
 const char *
 keystone_get_service_url(keystone_context_t *context, enum openstack_service desired_service_type, unsigned int desired_api_version)
 {
@@ -412,7 +494,7 @@ keystone_get_service_url(keystone_context_t *context, enum openstack_service des
 
 	assert(context != NULL);
 
-	service = find_service_by_type(context, desired_service_type);
+	service = find_service_by_type(context, context->pvt.services, desired_service_type);
 	if (service) {
 		static struct json_object *endpoint;
 		endpoint = service_find_endpoint_by_version(context, service, desired_api_version);
@@ -429,7 +511,8 @@ keystone_get_service_url(keystone_context_t *context, enum openstack_service des
 }
 
 /**
- * Retrieve the authentication token and service catalog from a now-complete JSON response.
+ * Retrieve the authentication token and service catalog from a now-complete Keystone JSON response,
+ * and store them in the Keystone context structure for later use.
  */
 static enum keystone_error
 process_keystone_json(keystone_context_t *context, struct json_object *jobj)
@@ -509,6 +592,8 @@ process_keystone_response(void *ptr, size_t size, size_t nmemb, void *userdata)
 	struct json_object *jobj;
 	enum json_tokener_error json_err;
 
+	assert(context->pvt.json_tokeniser != NULL);
+
 	jobj = json_tokener_parse_ex(context->pvt.json_tokeniser, body, len);
 	json_err = json_tokener_get_error(context->pvt.json_tokeniser);
 	if (json_tokener_success == json_err) {
@@ -528,7 +613,7 @@ process_keystone_response(void *ptr, size_t size, size_t nmemb, void *userdata)
 }
 
 /**
- * Authenticate against a Keystone authentication server with the given tenant and user names and password.
+ * Authenticate against a Keystone authentication service with the given tenant and user names and password.
  * This yields an authorisation token, which is then used to access all Swift services.
  */
 enum keystone_error
@@ -536,7 +621,16 @@ keystone_authenticate(keystone_context_t *context, const char *url, const char *
 {
 	CURLcode curl_err;
 	struct curl_slist *headers = NULL;
-	size_t body_len =
+	size_t body_len;
+
+	assert(context != NULL);
+	assert(context->pvt.curl != NULL);
+	assert(url != NULL);
+	assert(tenant_name != NULL);
+	assert(username != NULL);
+	assert(password != NULL);
+
+	body_len =
 		strlen(KEYSTONE_AUTH_PAYLOAD_BEFORE_USERNAME)
 		+ strlen(username)
 		+ strlen(KEYSTONE_AUTH_PAYLOAD_BEFORE_PASSWORD)
@@ -650,6 +744,10 @@ keystone_authenticate(keystone_context_t *context, const char *url, const char *
 	return KSERR_SUCCESS;
 }
 
+/**
+ * Return the previously-acquired Keystone authentication token, if any.
+ * If no authentication token has previously been acquired, return NULL.
+ */
 const char *
 keystone_get_auth_token(keystone_context_t *context)
 {

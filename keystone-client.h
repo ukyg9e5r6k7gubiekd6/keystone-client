@@ -163,13 +163,23 @@ enum keystone_error keystone_set_proxy(keystone_context_t *context, const char *
 enum keystone_error keystone_set_debug(keystone_context_t *context, unsigned int enable_debugging);
 
 /**
- * Authenticate against a Keystone authentication server with the given tenant and user names and password.
- * This yields an authorisation token, which is then used to access all OpenStack services.
+ * Authenticate against a Keystone authentication service with the given tenant and user names and password.
+ * This yields an authorisation token, which is then used to access all Swift services.
  */
 enum keystone_error keystone_authenticate(keystone_context_t *context, const char *url, const char *tenant_name, const char *username, const char *password);
 
+/**
+ * Return the previously-acquired Keystone authentication token, if any.
+ * If no authentication token has previously been acquired, return NULL.
+ */
 const char * keystone_get_auth_token(keystone_context_t *context);
 
+/**
+ * Given a desired service type and version, find a service of the given type in Keystone's catalog of services,
+ * then find an endpoint of that service with the given API version, and return its public URL.
+ * Return NULL if the service cannot be found, or if no endpoint of the given version can be found,
+ * or if the service endpoint of the given version has no public URL.
+ */
 const char *keystone_get_service_url(keystone_context_t *context, enum openstack_service desired_service_type, unsigned int desired_api_version);
 
 #endif /* KEYSTONE_CLIENT_H_ */
