@@ -46,6 +46,16 @@ static const char *const openstack_service_names[] = {
 };
 
 /**
+ * Service endpoint URL type names, as seen in JSON object keys.
+ * Order must match that in enum openstack_service_endpoint_type.
+ */
+static const char *const openstack_service_endpoint_url_type_names[] = {
+	"publicURL",
+	"privateURL",
+	"internalURL"
+};
+
+/**
  * Default handler for libcurl errors.
  */
 static void
@@ -457,23 +467,32 @@ service_find_endpoint_by_version(keystone_context_t *context, struct json_object
 }
 
 /**
- * Given a JSON object representing an OpenStack service endpoint, return its public URL, if any.
+ * Given a JSON object representing an OpenStack service endpoint, return its URL of the given type, if any.
+ * If the service endpoint has no URL
  */
 static const char *
-endpoint_public_url(keystone_context_t *context, struct json_object *endpoint)
+endpoint_url(keystone_context_t *context, struct json_object *endpoint, enum openstack_service_endpoint_url_type endpoint_url_type)
 {
 	struct json_object *endpoint_public_url;
 	const char *url_val;
+	const char *url_type_name;
 
-	if (json_object_object_get_ex(endpoint, "publicURL", &endpoint_public_url)) {
+	assert(context != NULL);
+	assert(endpoint != NULL);
+	assert(endpoint_url_type < ELEMENTSOF(openstack_service_endpoint_url_type_names));
+	assert(openstack_service_endpoint_url_type_names[(unsigned int) endpoint_url_type] != NULL);
+
+	url_type_name = openstack_service_endpoint_url_type_names[(unsigned int) endpoint_url_type];
+
+	if (json_object_object_get_ex(endpoint, url_type_name, &endpoint_public_url)) {
 		if (json_object_is_type(endpoint_public_url, json_type_string)) {
 			url_val = json_object_get_string(endpoint_public_url);
 		} else {
-			context->keystone_error("response.access.serviceCatalog[n].endpoints[n].publicURL is not a string", KSERR_PARSE);
+			context->keystone_error("response.access.serviceCatalog[n].endpoints[n] URL is not a string", KSERR_PARSE);
 			url_val = NULL;
 		}
 	} else {
-		context->keystone_error("response.access.serviceCatalog[n].endpoints[n] lacks a 'publicURL' key", KSERR_PARSE);
+		context->keystone_error("response.access.serviceCatalog[n].endpoints[n] lacks a URL key of he requested type", KSERR_PARSE);
 		url_val = NULL;
 	}
 
@@ -481,13 +500,13 @@ endpoint_public_url(keystone_context_t *context, struct json_object *endpoint)
 }
 
 /**
- * Given a desired service type and version, find a service of the given type in Keystone's catalog of services,
- * then find an endpoint of that service with the given API version, and return its public URL.
+ * Given a desired service type and version and type of URL, find a service of the given type in Keystone's catalog of services,
+ * then find an endpoint of that service with the given API version, then return its URL of the given type.
  * Return NULL if the service cannot be found, or if no endpoint of the given version can be found,
- * or if the service endpoint of the given version has no public URL.
+ * or if the service endpoint of the given version has no URL of the given type.
  */
 const char *
-keystone_get_service_url(keystone_context_t *context, enum openstack_service desired_service_type, unsigned int desired_api_version)
+keystone_get_service_url(keystone_context_t *context, enum openstack_service desired_service_type, unsigned int desired_api_version, enum openstack_service_endpoint_url_type endpoint_url_type)
 {
 	struct json_object *service;
 	const char *url;
@@ -499,7 +518,7 @@ keystone_get_service_url(keystone_context_t *context, enum openstack_service des
 		static struct json_object *endpoint;
 		endpoint = service_find_endpoint_by_version(context, service, desired_api_version);
 		if (endpoint) {
-			url = endpoint_public_url(context, endpoint);
+			url = endpoint_url(context, endpoint, endpoint_url_type);
 		} else {
 			url = NULL;
 		}

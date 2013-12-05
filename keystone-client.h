@@ -36,6 +36,15 @@ enum openstack_service {
 	OS_SERVICE_GLANCE   = 6  /* Glance image storage */
 };
 
+/**
+ * Types of OpenStack service endpoint.
+ */
+enum openstack_service_endpoint_url_type {
+	OS_ENDPOINT_URL_PUBLIC   = 0, /* Service's public endpoint */
+	OS_ENDPOINT_URL_PRIVATE  = 1, /* Service's private endpoint */
+	OS_ENDPOINT_URL_INTERNAL = 2, /* Service's internal endpoint */
+};
+
 /* swift client library's per-thread private context */
 struct keystone_context_private {
 	CURL *curl;       /* Handle to curl library's easy interface */
@@ -175,11 +184,11 @@ enum keystone_error keystone_authenticate(keystone_context_t *context, const cha
 const char * keystone_get_auth_token(keystone_context_t *context);
 
 /**
- * Given a desired service type and version, find a service of the given type in Keystone's catalog of services,
- * then find an endpoint of that service with the given API version, and return its public URL.
+ * Given a desired service type and version and type of URL, find a service of the given type in Keystone's catalog of services,
+ * then find an endpoint of that service with the given API version, then return its URL of the given type.
  * Return NULL if the service cannot be found, or if no endpoint of the given version can be found,
- * or if the service endpoint of the given version has no public URL.
+ * or if the service endpoint of the given version has no URL of the given type.
  */
-const char *keystone_get_service_url(keystone_context_t *context, enum openstack_service desired_service_type, unsigned int desired_api_version);
+const char *keystone_get_service_url(keystone_context_t *context, enum openstack_service desired_service_type, unsigned int desired_api_version, enum openstack_service_endpoint_url_type endpoint_url_type);
 
 #endif /* KEYSTONE_CLIENT_H_ */
