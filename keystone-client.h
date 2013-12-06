@@ -45,7 +45,7 @@ enum openstack_service_endpoint_url_type {
 	OS_ENDPOINT_URL_INTERNAL = 2, /* Service's internal endpoint */
 };
 
-/* swift client library's per-thread private context */
+/* keystone client library's per-thread private context */
 struct keystone_context_private {
 	CURL *curl;       /* Handle to curl library's easy interface */
 	struct json_tokener *json_tokeniser; /* libjson0 library's JSON tokeniser */
@@ -83,28 +83,29 @@ struct keystone_context {
 	/**
 	 * Called when a libcurl error occurs.
 	 * Your program may set this function pointer in order to perform custom error handling.
-	 * If this is NULL at the time swift_start is called, a default handler will be used.
+	 * If this is NULL at the time keystone_start is called, a default handler will be used.
 	 */
 	curl_error_callback_t curl_error;
 	/**
 	 * Called when a libjson error occurs.
 	 * Your program may set this function in order to perform custom error handling.
-	 * If this is NULL at the time swift_start is called, a default handler will be used.
+	 * If this is NULL at the time keystone_start is called, a default handler will be used.
 	 */
 	json_error_callback_t json_error;
 	/**
 	 * Called when a Keystone error occurs.
 	 * Your program may set this function in order to perform custom error handling.
-	 * If this is NULL at the time swift_start is called, a default handler will be used.
+	 * If this is NULL at the time keystone_start is called, a default handler will be used.
 	 */
 	keystone_error_callback_t keystone_error;
 	/**
 	 * Called when this library needs to allocate, re-allocate or free memory.
-	 * If size is zero, the previously-allocated memory at ptr is to be freed.
+	 * If size is zero and ptr is NULL, nothing is done.
+	 * If size is zero and ptr is non-NULL, the previously-allocated memory at ptr is to be freed.
 	 * If size is non-zero and ptr is NULL, memory of the given size is to be allocated.
 	 * If size is non-zero and ptr is non-NULL, the previously-allocated memory at ptr
 	 * is to be re-allocated to be the given size.
-	 * If this function pointer is NULL at the time swift_start is called, a default re-allocator will be used.
+	 * If this function pointer is NULL at the time keystone_start is called, a default re-allocator will be used.
 	 */
 	keystone_allocator_func_t allocator;
 	/* This member (and its members, recursively) are 'private'. */
@@ -135,7 +136,7 @@ enum keystone_error keystone_global_init(void);
  * after all secondary threads (if any) have exited,
  * so that there is precisely one thread in your program at the time of the call.
  * This library must not be used by your program after this function is called.
- * This function must be called exactly once for each successful prior call to swift_init
+ * This function must be called exactly once for each successful prior call to keystone_global_init
  * by your program.
  * These restrictions are imposed by libcurl, and the libcurl restrictions are in turn
  * imposed by the libraries that libcurl uses.
@@ -181,7 +182,7 @@ enum keystone_error keystone_authenticate(keystone_context_t *context, const cha
  * Return the previously-acquired Keystone authentication token, if any.
  * If no authentication token has previously been acquired, return NULL.
  */
-const char * keystone_get_auth_token(keystone_context_t *context);
+const char *keystone_get_auth_token(keystone_context_t *context);
 
 /**
  * Given a desired service type and version and type of URL, find a service of the given type in Keystone's catalog of services,
