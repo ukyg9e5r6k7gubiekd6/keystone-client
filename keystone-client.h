@@ -1,7 +1,6 @@
 #ifndef KEYSTONE_CLIENT_H_
 #define KEYSTONE_CLIENT_H_
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <malloc.h>
 #include <curl/curl.h>
