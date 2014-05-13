@@ -224,6 +224,8 @@ keystone_set_debug(keystone_context_t *context, unsigned int enable_debugging)
 	assert(context != NULL);
 	assert(context->pvt.curl != NULL);
 
+	context->pvt.debug = enable_debugging;
+
 	curl_err = curl_easy_setopt(context->pvt.curl, CURLOPT_VERBOSE, enable_debugging ? 1 : 0);
 	if (CURLE_OK != curl_err) {
 		context->curl_error("curl_easy_setopt", curl_err);
@@ -534,59 +536,28 @@ keystone_get_service_url(keystone_context_t *context, enum openstack_service des
  * and store them in the Keystone context structure for later use.
  */
 static enum keystone_error
-process_keystone_json(keystone_context_t *context, struct json_object *jobj)
+process_keystone_json(keystone_context_t *context, struct json_object *response)
 {
-	struct json_object *subobj;
+	struct json_object *access, *token, *id;
 
-	/* json_object_to_file_ext("/dev/stderr", jobj, JSON_C_TO_STRING_PRETTY); */
-	if (!json_object_is_type(jobj, json_type_object)) {
+	if (context->pvt.debug) {
+		json_object_to_file_ext("/dev/stderr", response, JSON_C_TO_STRING_PRETTY);
+	}
+	if (!json_object_is_type(response, json_type_object)) {
 		context->keystone_error("response is not an object", KSERR_PARSE);
 		return KSERR_PARSE; /* Not the expected JSON object */
 	}
-	/* Authentication token */
-	if (!json_object_object_get_ex(jobj, "access", &subobj)) {
+	/* Everything is in an "access" sub-object */
+	if (!json_object_object_get_ex(response, "access", &access)) {
 		context->keystone_error("response lacks 'access' key", KSERR_PARSE);
 		return KSERR_PARSE; /* Lacking the expected key */
 	}
-	if (!json_object_is_type(subobj, json_type_object)) {
+	if (!json_object_is_type(access, json_type_object)) {
 		context->keystone_error("response.access is not an object", KSERR_PARSE);
 		return KSERR_PARSE; /* Not the expected JSON object */
 	}
-	if (!json_object_object_get_ex(subobj, "token", &subobj)) {
-		context->keystone_error("reponse.access lacks 'token' key", KSERR_PARSE);
-		return KSERR_PARSE; /* Lacking the expected key */
-	}
-	if (!json_object_is_type(subobj, json_type_object)) {
-		context->keystone_error("response.access.token is not an object", KSERR_PARSE);
-		return KSERR_PARSE; /* Not the expected JSON object */
-	}
-	if (!json_object_object_get_ex(subobj, "id", &subobj)) {
-		context->keystone_error("response.access.token lacks 'id' key", KSERR_PARSE);
-		return KSERR_PARSE; /* Lacking the expected key */
-	}
-	if (!json_object_is_type(subobj, json_type_string)) {
-		context->keystone_error("response.access.token.id is not a string", KSERR_PARSE);
-		return KSERR_PARSE; /* Not the expected JSON string */
-	}
-	context->pvt.auth_token = context->allocator(
-		context->pvt.auth_token,
-		json_object_get_string_len(subobj)
-		+ 1 /* '\0' */
-	);
-	if (NULL == context->pvt.auth_token) {
-		return KSERR_PARSE; /* Allocation failed */
-	}
-	strcpy(context->pvt.auth_token, json_object_get_string(subobj));
-	/* Swift URL */
-	if (!json_object_object_get_ex(jobj, "access", &subobj)) {
-		context->keystone_error("response lacks 'access' key", KSERR_PARSE);
-		return KSERR_PARSE;
-	}
-	if (!json_object_is_type(subobj, json_type_object)) {
-		context->keystone_error("response.access not an object", KSERR_PARSE);
-		return KSERR_PARSE;
-	}
-	if (!json_object_object_get_ex(subobj, "serviceCatalog", &context->pvt.services)) {
+	/* Service catalog */
+	if (!json_object_object_get_ex(access, "serviceCatalog", &context->pvt.services)) {
 		context->keystone_error("response.access lacks 'serviceCatalog' key", KSERR_PARSE);
 		return KSERR_PARSE;
 	}
@@ -594,6 +565,32 @@ process_keystone_json(keystone_context_t *context, struct json_object *jobj)
 		context->keystone_error("response.access.serviceCatalog not an array", KSERR_PARSE);
 		return KSERR_PARSE;
 	}
+	/* Authentication token */
+	if (!json_object_object_get_ex(access, "token", &token)) {
+		context->keystone_error("reponse.access lacks 'token' key", KSERR_PARSE);
+		return KSERR_PARSE; /* Lacking the expected key */
+	}
+	if (!json_object_is_type(token, json_type_object)) {
+		context->keystone_error("response.access.token is not an object", KSERR_PARSE);
+		return KSERR_PARSE; /* Not the expected JSON object */
+	}
+	if (!json_object_object_get_ex(token, "id", &id)) {
+		context->keystone_error("response.access.token lacks 'id' key", KSERR_PARSE);
+		return KSERR_PARSE; /* Lacking the expected key */
+	}
+	if (!json_object_is_type(id, json_type_string)) {
+		context->keystone_error("response.access.token.id is not a string", KSERR_PARSE);
+		return KSERR_PARSE; /* Not the expected JSON string */
+	}
+	context->pvt.auth_token = context->allocator(
+		context->pvt.auth_token,
+		json_object_get_string_len(id)
+		+ 1 /* '\0' */
+	);
+	if (NULL == context->pvt.auth_token) {
+		return KSERR_PARSE; /* Allocation failed */
+	}
+	strcpy(context->pvt.auth_token, json_object_get_string(id));
 
 	return KSERR_SUCCESS;
 }
@@ -707,6 +704,10 @@ keystone_authenticate(keystone_context_t *context, const char *url, const char *
 		tenant_name,
 		KEYSTONE_AUTH_PAYLOAD_END
 	);
+
+	if (context->pvt.debug) {
+		fputs(context->pvt.auth_payload, stderr);
+	}
 
 	/* Pass the POST request body to libcurl. The data are not copied, so they must persist during the request lifetime. */
 	curl_err = curl_easy_setopt(context->pvt.curl, CURLOPT_POSTFIELDS, context->pvt.auth_payload);
