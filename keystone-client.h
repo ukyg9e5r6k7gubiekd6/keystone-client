@@ -47,6 +47,7 @@ enum openstack_service_endpoint_url_type {
 /* keystone client library's per-thread private context */
 struct keystone_context_private {
 	CURL *curl;       /* Handle to curl library's easy interface */
+	unsigned int debug;
 	struct json_tokener *json_tokeniser; /* libjson0 library's JSON tokeniser */
 	struct json_object *services; /* service catalog JSON array */
 	unsigned int verify_cert_trusted;  /* True if the peer's certificate must chain to a trusted CA, false otherwise */
