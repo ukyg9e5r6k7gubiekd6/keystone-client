@@ -34,6 +34,7 @@ enum openstack_service {
 	OS_SERVICE_CINDER   = 5, /* Cinder block storage */
 	OS_SERVICE_GLANCE   = 6  /* Glance image storage */
 };
+#define OS_SERVICE_MAX OS_SERVICE_GLANCE
 
 /**
  * Types of OpenStack service endpoint.
@@ -43,6 +44,7 @@ enum openstack_service_endpoint_url_type {
 	OS_ENDPOINT_URL_PRIVATE  = 1, /* Service's private endpoint */
 	OS_ENDPOINT_URL_INTERNAL = 2, /* Service's internal endpoint */
 };
+#define OS_ENDPOINT_URL_MAX OS_ENDPOINT_URL_INTERNAL
 
 /* keystone client library's per-thread private context */
 struct keystone_context_private {
@@ -171,6 +173,9 @@ enum keystone_error keystone_set_proxy(keystone_context_t *context, const char *
  * Currently this enables logging to standard error of libcurl's actions.
  */
 enum keystone_error keystone_set_debug(keystone_context_t *context, unsigned int enable_debugging);
+
+const char *service_name(unsigned int service);
+const char *endpoint_url_name(unsigned int endpoint);
 
 /**
  * Authenticate against a Keystone authentication service with the given tenant and user names and password.

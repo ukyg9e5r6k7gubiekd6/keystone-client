@@ -51,8 +51,15 @@ static const char *const openstack_service_names[] = {
  */
 static const char *const openstack_service_endpoint_url_type_names[] = {
 	"publicURL",
-	"privateURL",
+	"adminURL",
 	"internalURL"
+};
+
+/* HUman-friendly names for service endpoint URL types */
+static const char *const openstack_service_endpoint_url_type_friendly_names[] = {
+	"public",
+	"admin",
+	"internal"
 };
 
 /**
@@ -341,6 +348,20 @@ json_array_find(keystone_context_t *context, struct json_object *array, item_cal
 	return NULL;
 }
 
+const char *
+service_name(unsigned int service)
+{
+	assert(service < ELEMENTSOF(openstack_service_names));
+	return openstack_service_names[service];
+}
+
+const char *
+endpoint_url_name(unsigned int endpoint)
+{
+	assert(endpoint < ELEMENTSOF(openstack_service_endpoint_url_type_friendly_names));
+	return openstack_service_endpoint_url_type_friendly_names[endpoint];
+}
+
 /**
  * If the OpenStack service represented by the given JSON object is of the type name given by callback_arg, return STOP.
  * Otherwise, if it is of some other type or if its type cannot be determined, return CONTINUE.
@@ -494,7 +515,7 @@ endpoint_url(keystone_context_t *context, struct json_object *endpoint, enum ope
 			url_val = NULL;
 		}
 	} else {
-		context->keystone_error("response.access.serviceCatalog[n].endpoints[n] lacks a URL key of he requested type", KSERR_PARSE);
+		context->keystone_error("response.access.serviceCatalog[n].endpoints[n] lacks a URL key of the requested type", KSERR_PARSE);
 		url_val = NULL;
 	}
 
