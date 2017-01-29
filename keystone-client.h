@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <curl/curl.h>
-#include <json/json.h>
+#include <json-c/json.h>
 
 /**
  * High-level types of errors which can occur while attempting to use Keystone.
