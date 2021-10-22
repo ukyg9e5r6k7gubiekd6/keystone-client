@@ -169,6 +169,9 @@ keystone_start(keystone_context_t *context)
 		return KSERR_INIT_FAILED;
 	}
 
+	context->pvt.auth_token = NULL;
+	context->pvt.auth_payload = NULL;
+	context->pvt.json_tokeniser = NULL;
 	return KSERR_SUCCESS;
 }
 
