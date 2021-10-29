@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <string.h>
-#include <errno.h>
 
 #include "keystone-client.h"
 
@@ -12,22 +11,13 @@
 /* The content-type we desire to receive in authentication responses */
 #define KEYSTONE_AUTH_RESPONSE_FORMAT MIME_TYPE_JSON
 /* The portion of a JSON-encoded Keystone credentials POST body preceding the username */
-#define KEYSTONE_AUTH_PAYLOAD_BEFORE_USERNAME "\
-{\n\
-	\"auth\":{\n\
-		\"passwordCredentials\":{\n\
-			\"username\":\""
+#define KEYSTONE_AUTH_PAYLOAD_BEFORE_USERNAME "{\"auth\": {\"identity\": {\"methods\": [\"password\"],\"password\": {\"user\": {\"domain\": {\"name\": \"Default\"},\"name\": \""
 /* The portion of a JSON-encoded Keystone credentials POST body succeeding the username and preceding the password */
-#define KEYSTONE_AUTH_PAYLOAD_BEFORE_PASSWORD "\",\n\
-			\"password\":\""
+#define KEYSTONE_AUTH_PAYLOAD_BEFORE_PASSWORD "\", \"password\": \""
 /* The portion of a JSON-encoded Keystone credentials POST body succeeding the password and preceding the tenant name */
-#define KEYSTONE_AUTH_PAYLOAD_BEFORE_TENANT "\"\n\
-		},\n\
-		\"tenantName\":\""
+#define KEYSTONE_AUTH_PAYLOAD_BEFORE_TENANT "\"}}}, \"scope\": {\"project\":{\"domain\":{\"name\": \"Default\"}, \"name\": \""
 /* The portion of a JSON-encoded Keystone credentials POST body succeeding the tenant name */
-#define KEYSTONE_AUTH_PAYLOAD_END "\"\n\
-	}\n\
-}"
+#define KEYSTONE_AUTH_PAYLOAD_END "\"}}}}"
 /* Number of elements in a statically-sized array */
 #define ELEMENTSOF(arr) (sizeof(arr) / sizeof((arr)[0]))
 
@@ -55,7 +45,7 @@ static const char *const openstack_service_endpoint_url_type_names[] = {
 	"internalURL"
 };
 
-/* HUman-friendly names for service endpoint URL types */
+/* Human-friendly names for service endpoint URL types */
 static const char *const openstack_service_endpoint_url_type_friendly_names[] = {
 	"public",
 	"admin",
@@ -344,7 +334,6 @@ json_array_find(keystone_context_t *context, struct json_object *array, item_cal
 			return item;
 		default:
 			assert(0);
-			break;
 		}
 	}
 
@@ -562,7 +551,7 @@ keystone_get_service_url(keystone_context_t *context, enum openstack_service des
 static enum keystone_error
 process_keystone_json(keystone_context_t *context, struct json_object *response)
 {
-	struct json_object *access, *token, *id;
+	struct json_object *token;
 
 	if (context->pvt.debug) {
 		json_object_to_file_ext("/dev/stderr", response, JSON_C_TO_STRING_PRETTY);
@@ -571,50 +560,24 @@ process_keystone_json(keystone_context_t *context, struct json_object *response)
 		context->keystone_error("response is not an object", KSERR_PARSE);
 		return KSERR_PARSE; /* Not the expected JSON object */
 	}
-	/* Everything is in an "access" sub-object */
-	if (!json_object_object_get_ex(response, "access", &access)) {
-		context->keystone_error("response lacks 'access' key", KSERR_PARSE);
-		return KSERR_PARSE; /* Lacking the expected key */
-	}
-	if (!json_object_is_type(access, json_type_object)) {
-		context->keystone_error("response.access is not an object", KSERR_PARSE);
-		return KSERR_PARSE; /* Not the expected JSON object */
-	}
-	/* Service catalog */
-	if (!json_object_object_get_ex(access, "serviceCatalog", &context->pvt.services)) {
-		context->keystone_error("response.access lacks 'serviceCatalog' key", KSERR_PARSE);
-		return KSERR_PARSE;
-	}
-	if (!json_object_is_type(context->pvt.services, json_type_array)) {
-		context->keystone_error("response.access.serviceCatalog not an array", KSERR_PARSE);
-		return KSERR_PARSE;
-	}
-	/* Authentication token */
-	if (!json_object_object_get_ex(access, "token", &token)) {
-		context->keystone_error("reponse.access lacks 'token' key", KSERR_PARSE);
+	/* Catalog in "token" -> "catalog" */
+	if (!json_object_object_get_ex(response, "token", &token)) {
+		context->keystone_error("response lacks 'token' key", KSERR_PARSE);
 		return KSERR_PARSE; /* Lacking the expected key */
 	}
 	if (!json_object_is_type(token, json_type_object)) {
-		context->keystone_error("response.access.token is not an object", KSERR_PARSE);
+		context->keystone_error("response.token is not an object", KSERR_PARSE);
 		return KSERR_PARSE; /* Not the expected JSON object */
 	}
-	if (!json_object_object_get_ex(token, "id", &id)) {
-		context->keystone_error("response.access.token lacks 'id' key", KSERR_PARSE);
-		return KSERR_PARSE; /* Lacking the expected key */
+	/* Catalog */
+	if (!json_object_object_get_ex(token, "catalog", &context->pvt.services)) {
+		context->keystone_error("response.token lacks 'catalog' key", KSERR_PARSE);
+		return KSERR_PARSE;
 	}
-	if (!json_object_is_type(id, json_type_string)) {
-		context->keystone_error("response.access.token.id is not a string", KSERR_PARSE);
-		return KSERR_PARSE; /* Not the expected JSON string */
+	if (!json_object_is_type(context->pvt.services, json_type_array)) {
+		context->keystone_error("response.token.catalog not an array", KSERR_PARSE);
+		return KSERR_PARSE;
 	}
-	context->pvt.auth_token = context->allocator(
-		context->pvt.auth_token,
-		json_object_get_string_len(id)
-		+ 1 /* '\0' */
-	);
-	if (NULL == context->pvt.auth_token) {
-		return KSERR_PARSE; /* Allocation failed */
-	}
-	strcpy(context->pvt.auth_token, json_object_get_string(id));
 
 	return KSERR_SUCCESS;
 }
@@ -650,6 +613,27 @@ process_keystone_response(void *ptr, size_t size, size_t nmemb, void *userdata)
 	}
 
 	return len; /* Inform libcurl that all data were 'handled' */
+}
+
+static size_t
+process_keystone_response_headers(char *buffer, size_t size, size_t nitems,
+								  void *userdata) {
+/* Authentication token */
+	size_t len = size * nitems;
+	keystone_context_t *context = (keystone_context_t *) userdata;
+	if (strstr(strtok(buffer, ":"), "X-Subject-Token")) {
+		char *token = strtok(NULL, "\n");
+		context->pvt.auth_token = context->allocator(context->pvt.auth_token,
+													 strlen(token)
+		);
+		if (NULL == context->pvt.auth_token) {
+			return 0; /* Allocation failed */
+		}
+		strcpy(context->pvt.auth_token, token);
+		printf("token in process_keystone_response_headers: %s\n",
+			   context->pvt.auth_token);
+	}
+	return len;
 }
 
 /**
@@ -766,6 +750,23 @@ keystone_authenticate(keystone_context_t *context, const char *url, const char *
 	}
 
 	curl_err = curl_easy_setopt(context->pvt.curl, CURLOPT_WRITEDATA, context);
+	if (CURLE_OK != curl_err) {
+		context->curl_error("curl_easy_setopt", curl_err);
+		curl_slist_free_all(headers);
+		return KSERR_URL_FAILED;
+	}
+
+	curl_err = curl_easy_setopt(context->pvt.curl, CURLOPT_HEADERDATA,
+								context);
+	if (CURLE_OK != curl_err) {
+		context->curl_error("curl_easy_setopt", curl_err);
+		curl_slist_free_all(headers);
+		return KSERR_URL_FAILED;
+	}
+
+	curl_err = curl_easy_setopt(context->pvt.curl,
+								CURLOPT_HEADERFUNCTION,
+								process_keystone_response_headers);
 	if (CURLE_OK != curl_err) {
 		context->curl_error("curl_easy_setopt", curl_err);
 		curl_slist_free_all(headers);
