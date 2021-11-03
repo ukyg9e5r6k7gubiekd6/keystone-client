@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "keystone-client.h"
 
 int main(void)
@@ -21,11 +23,10 @@ int main(void)
 
 	result = keystone_set_debug(&context, 1);
 	printf("keystone_set_debug result: %d\n", result);
-
-	const char url[] = "http://192.168.122.216/identity/v3/auth/tokens";
-	const char tenant_name[] = "admin";
-	const char username[] = "admin";
-	const char password[] = "secret";
+	const char *url = strcat(getenv("KSTEST_ADMIN_URL"), "/v3/auth/tokens");
+	const char *tenant_name = getenv("OS_PROJECT_NAME");
+	const char *username = getenv("KSTEST_ADMIN_USERNAME");
+	const char *password = getenv("KSTEST_ADMIN_PASSWORD");
 	result = keystone_authenticate(&context, url, tenant_name, username,
 								   password);
 	printf("keystone_authenticate result: %d\n", result);
