@@ -23,10 +23,40 @@ int main(void)
 
 	result = keystone_set_debug(&context, 1);
 	printf("keystone_set_debug result: %d\n", result);
-	const char *url = strcat(getenv("KSTEST_ADMIN_URL"), "/v3/auth/tokens");
-	const char *tenant_name = getenv("OS_PROJECT_NAME");
-	const char *username = getenv("KSTEST_ADMIN_USERNAME");
-	const char *password = getenv("KSTEST_ADMIN_PASSWORD");
+
+	char *temp_var = NULL;
+	const char *url;
+	temp_var = getenv("KSTEST_ADMIN_URL");
+	if (temp_var) {
+		url = strcat(temp_var, "/v3/auth/tokens");
+	}
+	else {
+		url = "http://192.168.122.216/identity/v3/auth/tokens";
+	}
+	const char *tenant_name;
+	temp_var = getenv("OS_PROJECT_NAME");
+	if (temp_var) {
+		tenant_name = temp_var;
+	}
+	else {
+		tenant_name = "admin";
+	}
+	const char *username;
+	temp_var = getenv("KSTEST_ADMIN_USERNAME");
+	if (temp_var) {
+		username = temp_var;
+	}
+	else {
+		username = "admin";
+	}
+	const char *password;
+	temp_var = getenv("KSTEST_ADMIN_PASSWORD");
+	if (temp_var) {
+		password = temp_var;
+	}
+	else {
+		password = "secret";
+	}
 	result = keystone_authenticate(&context, url, tenant_name, username,
 								   password);
 	printf("keystone_authenticate result: %d\n", result);
