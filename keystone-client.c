@@ -251,7 +251,7 @@ json_array_length(keystone_context_t *context, struct json_object *array)
 		if (len < 0) {
 			context->keystone_error("JSON array length is negative", KSERR_PARSE);
 			len = 0;
-		} else if (len > UINT_MAX) {
+		} else if ((unsigned int)len > UINT_MAX) {
 			context->keystone_error("JSON array length is too large for unsigned int", KSERR_PARSE);
 			len = 0;
 		}

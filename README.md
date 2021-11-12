@@ -9,11 +9,12 @@ Build and launch on Ubuntu
 ==========================
 $ sudo apt install libcurl4-openssl-dev libjson-c-dev
 
-$ gcc -g3 -c -pedantic -Wall -fpic keystone-client.c -lcurl -ljson-c && \
-gcc -shared -o libkeystone-client.so keystone-client.o
+$ gcc -g3 -c -pedantic -Wall -Wextra -Wformat-security -std=c18 -fpic \
+keystone-client.c -lcurl -ljson-c \
+&& gcc -shared -o libkeystone-client.so keystone-client.o
 
-$ gcc -g3 -L<PATH_TO_REPO> -Wall -o test tests.c \
--lkeystone-client -lcurl -ljson-c
+$ gcc -g3 -L<PATH_TO_REPO> -Wall -Wextra -Wformat-security -std=c18 -o test \
+tests.c -lkeystone-client -lcurl -ljson-c
 
 $ export KSTEST_ADMIN_URL=http://<IP_ADDRESS>/identity
 $ export OS_PROJECT_NAME=admin
