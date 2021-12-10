@@ -4,12 +4,11 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <curl/curl.h>
-#include <json-c/json.h>
 
 /**
  * High-level types of errors which can occur while attempting to use Keystone.
- * More detail is available from lower-level libraries (such as curl and
- * libjson) using error callbacks specific to those libraries.
+ * More detail is available from lower-level libraries (such as curl) using
+ * error callbacks specific to those libraries.
  */
 enum keystone_error {
 	KSERR_SUCCESS       = 0, /* Success */
@@ -51,8 +50,6 @@ enum openstack_service_endpoint_url_type {
 struct keystone_context_private {
 	CURL *curl;       /* Handle to curl library's easy interface */
 	unsigned int debug;
-	struct json_tokener *json_tokeniser; /* libjson0 library's JSON tokeniser */
-	struct json_object *services; /* service catalog JSON array */
 	unsigned int verify_cert_trusted;  /* True if the peer's certificate must
  * chain to a trusted CA, false otherwise */
 	unsigned int verify_cert_hostname; /* True if the peer's certificate's
@@ -70,10 +67,6 @@ typedef void *(*keystone_allocator_func_t)(void *ptr, size_t newsize);
 
 /* A function which receives curl errors */
 typedef void (*curl_error_callback_t)(const char *curl_funcname, CURLcode res);
-
-/* A function which receives libjson errors */
-typedef void (*json_error_callback_t)(const char *json_funcname,
-		enum json_tokener_error json_err);
 
 /* A function which receives Keystone errors */
 typedef void (*keystone_error_callback_t)(const char *keystone_operation,
@@ -97,13 +90,6 @@ struct keystone_context {
 	 * a default handler will be used.
 	 */
 	curl_error_callback_t curl_error;
-	/**
-	 * Called when a libjson error occurs.
-	 * Your program may set this function in order to perform custom error
-	 * handling. If this is NULL at the time keystone_start is called, a default
-	 * handler will be used.
-	 */
-	json_error_callback_t json_error;
 	/**
 	 * Called when a Keystone error occurs.
 	 * Your program may set this function in order to perform custom error
@@ -222,10 +208,5 @@ const char *keystone_get_auth_token(keystone_context_t *context);
  * version can be found, or if the service endpoint of the given version has no
  * URL of the given type.
  */
-const char *keystone_get_service_url(
-		keystone_context_t *context,
-		enum openstack_service desired_service_type,
-				unsigned int desired_api_version,
-				enum openstack_service_endpoint_url_type endpoint_url_type);
 
 #endif /* KEYSTONE_CLIENT_H_ */

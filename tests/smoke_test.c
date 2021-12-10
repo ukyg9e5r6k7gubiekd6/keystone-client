@@ -1,6 +1,7 @@
+#include <stdlib.h>
 #include <string.h>
 
-#include "keystone-client.h"
+#include "../keystone-client.h"
 
 enum keystone_error
 init() {
@@ -16,7 +17,6 @@ start(keystone_context_t *context){
 	/* TODO: eliminate preliminary assignment - do default initialisation
 	 * inside keystone_start */
 	context->curl_error = NULL;
-	context->json_error = NULL;
 	context->keystone_error = NULL;
 	context->allocator = NULL;
 	enum keystone_error result = keystone_start(context);
